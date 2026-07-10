@@ -42,14 +42,11 @@ def verify_signature(payload, signature_header):
     return hmac.compare_digest(expected, signature_header)
 
 
-def match_preset(message_text, presets):
-    if not presets:
-        return None
-
+def generate_reply(message_text, presets):
     catalog = "\n".join(
         f"{i + 1}. Q: {p['question']}\n   A: {p['answer']}"
         for i, p in enumerate(presets)
-    )
+    ) or "(no presets configured)"
 
     response = claude.messages.create(
         model="claude-haiku-4-5",
@@ -66,9 +63,23 @@ def match_preset(message_text, presets):
                                 "1-based index of the best-matching preset, "
                                 "or 0 if none reasonably match"
                             ),
-                        }
+                        },
+                        "general_answer": {
+                            "type": ["string", "null"],
+                            "description": (
+                                "A short, safe reply for simple general "
+                                "questions (greetings, thanks, generic "
+                                "questions about laser engraving as a craft) "
+                                "when no preset matches, written in a warm, "
+                                "casual, personal Taglish tone. Null if the "
+                                "question requires business-specific facts "
+                                "(pricing, hours, turnaround time, "
+                                "guarantees, availability, policies) that "
+                                "aren't in the presets."
+                            ),
+                        },
                     },
-                    "required": ["matched_index"],
+                    "required": ["matched_index", "general_answer"],
                     "additionalProperties": False,
                 },
             }
@@ -77,24 +88,46 @@ def match_preset(message_text, presets):
             {
                 "role": "user",
                 "content": (
-                    "A customer sent this message to a Facebook Page:\n"
+                    "A customer sent this message to a Facebook Page for a "
+                    "small business:\n"
                     f'"{message_text}"\n\n'
-                    "Here are the preset questions and answers the page owner "
-                    "has prepared:\n"
+                    "Here are the preset questions and answers the page "
+                    "owner has prepared:\n"
                     f"{catalog}\n\n"
-                    "Which preset best answers the customer's message? Only "
-                    "match if it's a genuinely close fit in meaning, not just "
-                    "shared keywords."
+                    "First, check if a preset is a genuinely close match in "
+                    "meaning (not just shared keywords) and set "
+                    "matched_index accordingly (0 if none match).\n\n"
+                    "If no preset matches, decide whether this is a simple, "
+                    "general question you can safely answer yourself "
+                    "(greetings, thanks, small talk, generic questions "
+                    "about laser engraving as a craft or technology) and "
+                    "write a short general_answer for it. Do NOT invent or "
+                    "guess specific facts about this business (prices, "
+                    "hours, turnaround time, guarantees, stock, policies) "
+                    "that aren't given to you in the presets — leave "
+                    "general_answer as null in that case so a human can "
+                    "follow up instead.\n\n"
+                    "When you do write a general_answer, sound like a real "
+                    "Filipino small business owner personally texting back "
+                    "a customer, not like a formal AI assistant. Use "
+                    "natural Taglish (mixing Tagalog and English the way "
+                    "people actually chat) when it fits the customer's own "
+                    "message. Keep it short, warm, and casual — avoid "
+                    "stiff or corporate phrases like 'I'd be happy to "
+                    "assist you' or 'As an AI'."
                 ),
             }
         ],
     )
 
     text = next(b.text for b in response.content if b.type == "text")
-    index = json.loads(text).get("matched_index", 0)
-    if not (1 <= index <= len(presets)):
-        return None
-    return presets[index - 1]["answer"]
+    result = json.loads(text)
+
+    index = result.get("matched_index", 0)
+    if 1 <= index <= len(presets):
+        return presets[index - 1]["answer"]
+
+    return result.get("general_answer")
 
 
 def send_message(recipient_id, text):
@@ -129,7 +162,7 @@ def receive():
             if not message or message.get("is_echo") or "text" not in message:
                 continue
             sender_id = event["sender"]["id"]
-            reply = match_preset(message["text"], presets) or FALLBACK_MESSAGE
+            reply = generate_reply(message["text"], presets) or FALLBACK_MESSAGE
             send_message(sender_id, reply)
 
     return "EVENT_RECEIVED", 200
