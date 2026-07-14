@@ -207,23 +207,29 @@ def image_links_for(preset):
     ]
 
 
-def send_message(recipient_id, text):
-    requests.post(
+def call_send_api(payload):
+    response = requests.post(
         "https://graph.facebook.com/v21.0/me/messages",
         params={"access_token": PAGE_ACCESS_TOKEN},
-        json={
+        json=payload,
+        timeout=10,
+    )
+    if not response.ok:
+        print(f"Send API error {response.status_code}: {response.text}")
+
+
+def send_message(recipient_id, text):
+    call_send_api(
+        {
             "recipient": {"id": recipient_id},
             "message": {"text": text, "metadata": BOT_METADATA_TAG},
-        },
-        timeout=10,
+        }
     )
 
 
 def send_image(recipient_id, image_url):
-    requests.post(
-        "https://graph.facebook.com/v21.0/me/messages",
-        params={"access_token": PAGE_ACCESS_TOKEN},
-        json={
+    call_send_api(
+        {
             "recipient": {"id": recipient_id},
             "message": {
                 "attachment": {
@@ -232,8 +238,7 @@ def send_image(recipient_id, image_url):
                 },
                 "metadata": BOT_METADATA_TAG,
             },
-        },
-        timeout=10,
+        }
     )
 
 
