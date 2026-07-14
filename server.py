@@ -19,6 +19,7 @@ FALLBACK_MESSAGE = os.environ.get(
     "FALLBACK_MESSAGE",
     "Thanks for reaching out! We'll get back to you soon.",
 )
+LEAD_LABEL_ID = os.environ.get("LEAD_LABEL_ID")
 
 app = Flask(__name__)
 claude = anthropic.Anthropic()
@@ -44,7 +45,9 @@ def verify_signature(payload, signature_header):
 
 def generate_reply(message_text, presets):
     catalog = "\n".join(
-        f"{i + 1}. Q: {p['question']}\n   A: {p['answer']}"
+        f"{i + 1}. Q: {p['question']}\n"
+        f"   A: {p['answer']}\n"
+        f"   Link: {p.get('link') or '(none)'}"
         for i, p in enumerate(presets)
     ) or "(no presets configured)"
 
@@ -64,22 +67,35 @@ def generate_reply(message_text, presets):
                                 "or 0 if none reasonably match"
                             ),
                         },
-                        "general_answer": {
+                        "reply": {
                             "type": ["string", "null"],
                             "description": (
-                                "A short, safe reply for simple general "
-                                "questions (greetings, thanks, generic "
-                                "questions about laser engraving as a craft) "
-                                "when no preset matches, written in a warm, "
-                                "casual, personal Taglish tone. Null if the "
-                                "question requires business-specific facts "
-                                "(pricing, hours, turnaround time, "
-                                "guarantees, availability, policies) that "
-                                "aren't in the presets."
+                                "The final message to send the customer. "
+                                "If matched_index points to a preset, this "
+                                "must be a natural-sounding rephrasing of "
+                                "that preset's answer — same facts, numbers, "
+                                "and terms, different wording each time. If "
+                                "that preset has a Link, weave it into the "
+                                "reply naturally. If matched_index is 0, "
+                                "this is a short safe general reply, or "
+                                "null if the question needs business facts "
+                                "not in the presets."
+                            ),
+                        },
+                        "is_lead": {
+                            "type": "boolean",
+                            "description": (
+                                "True if this message shows genuine buying "
+                                "intent — asking about price to decide, "
+                                "wanting to order/purchase, asking to set "
+                                "an appointment/demo, or requesting specs "
+                                "to make a purchase decision. False for "
+                                "general curiosity, small talk, or "
+                                "unrelated questions."
                             ),
                         },
                     },
-                    "required": ["matched_index", "general_answer"],
+                    "required": ["matched_index", "reply", "is_lead"],
                     "additionalProperties": False,
                 },
             }
@@ -92,31 +108,48 @@ def generate_reply(message_text, presets):
                     "small business:\n"
                     f'"{message_text}"\n\n'
                     "Here are the preset questions and answers the page "
-                    "owner has prepared:\n"
+                    "owner has prepared, each with an optional reference "
+                    "link (a video or image URL; a preset may have more "
+                    "than one URL separated by spaces — include whichever "
+                    "one(s) are actually relevant to your reply, not "
+                    "necessarily all of them):\n"
                     f"{catalog}\n\n"
-                    "First, check if a preset is a genuinely close match in "
-                    "meaning (not just shared keywords) and set "
+                    "Step 1: Check if a preset is a genuinely close match "
+                    "in meaning (not just shared keywords) and set "
                     "matched_index accordingly (0 if none match).\n\n"
-                    "If no preset matches, decide whether this is a simple, "
-                    "general question you can safely answer yourself "
-                    "(greetings, thanks, small talk, generic questions "
-                    "about laser engraving as a craft or technology) and "
-                    "write a short general_answer for it. Do NOT invent or "
-                    "guess specific facts about this business (prices, "
-                    "hours, turnaround time, guarantees, stock, policies) "
-                    "that aren't given to you in the presets — leave "
-                    "general_answer as null in that case so a human can "
-                    "follow up instead.\n\n"
-                    "When you do write a general_answer, sound like a real "
-                    "Filipino small business owner personally texting back "
-                    "a customer, not like a formal AI assistant. Use "
-                    "natural Taglish (mixing Tagalog and English the way "
-                    "people actually chat) when it fits the customer's own "
-                    "message. Keep it short, warm, and casual — avoid "
-                    "stiff or corporate phrases like 'I'd be happy to "
-                    "assist you' or 'As an AI'. Keep general_answer to 1-2 "
-                    "short sentences, like a real chat reply, never a long "
-                    "paragraph."
+                    "Step 2: Write the reply.\n"
+                    "- If a preset matched: rephrase that preset's answer "
+                    "in your own natural voice so it doesn't sound like a "
+                    "canned script, but you MUST keep every specific fact "
+                    "exactly the same — every price, number, name, date, "
+                    "and specific term must be preserved exactly as "
+                    "written. Do not add, remove, soften, or guess at any "
+                    "fact. Only the phrasing/sentence structure should "
+                    "vary. If that preset has a Link (not '(none)'), "
+                    "include that exact URL naturally in the reply (e.g. "
+                    "'here's a video showing it: <link>'). Never invent or "
+                    "guess a link that wasn't given to you.\n"
+                    "- If no preset matched: if this is a simple, general "
+                    "question you can safely answer yourself (greetings, "
+                    "thanks, small talk, generic questions about laser "
+                    "engraving as a craft or technology), write a short "
+                    "safe reply. Do NOT invent or guess specific facts "
+                    "about this business (prices, hours, turnaround time, "
+                    "guarantees, stock, policies) that aren't given to you "
+                    "in the presets — set reply to null in that case so a "
+                    "human can follow up instead.\n\n"
+                    "Voice: sound like a real Filipino small business "
+                    "owner personally texting back a customer, not a "
+                    "formal AI assistant. Use natural Taglish (mixing "
+                    "Tagalog and English the way people actually chat) "
+                    "when it fits the customer's own message. Keep it "
+                    "warm and casual — avoid stiff or corporate phrases "
+                    "like 'I'd be happy to assist you' or 'As an AI'. "
+                    "Keep the reply to 1-3 short sentences, like a real "
+                    "chat message, never a long paragraph.\n\n"
+                    "Step 3: Set is_lead to true only if this specific "
+                    "message shows genuine buying intent (see schema), "
+                    "not just because a preset happened to match."
                 ),
             }
         ],
@@ -124,12 +157,7 @@ def generate_reply(message_text, presets):
 
     text = next(b.text for b in response.content if b.type == "text")
     result = json.loads(text)
-
-    index = result.get("matched_index", 0)
-    if 1 <= index <= len(presets):
-        return presets[index - 1]["answer"]
-
-    return result.get("general_answer")
+    return result.get("reply"), result.get("is_lead", False)
 
 
 def send_message(recipient_id, text):
@@ -137,6 +165,16 @@ def send_message(recipient_id, text):
         "https://graph.facebook.com/v21.0/me/messages",
         params={"access_token": PAGE_ACCESS_TOKEN},
         json={"recipient": {"id": recipient_id}, "message": {"text": text}},
+        timeout=10,
+    )
+
+
+def apply_lead_label(psid):
+    if not LEAD_LABEL_ID:
+        return
+    requests.post(
+        f"https://graph.facebook.com/v21.0/{LEAD_LABEL_ID}/label",
+        params={"user": psid, "access_token": PAGE_ACCESS_TOKEN},
         timeout=10,
     )
 
@@ -164,8 +202,10 @@ def receive():
             if not message or message.get("is_echo") or "text" not in message:
                 continue
             sender_id = event["sender"]["id"]
-            reply = generate_reply(message["text"], presets) or FALLBACK_MESSAGE
-            send_message(sender_id, reply)
+            reply, is_lead = generate_reply(message["text"], presets)
+            send_message(sender_id, reply or FALLBACK_MESSAGE)
+            if is_lead:
+                apply_lead_label(sender_id)
 
     return "EVENT_RECEIVED", 200
 
