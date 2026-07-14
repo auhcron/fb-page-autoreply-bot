@@ -17,7 +17,8 @@ APP_SECRET = os.environ.get("APP_SECRET")
 PRESETS_PATH = os.environ.get("PRESETS_PATH", "presets.csv")
 FALLBACK_MESSAGE = os.environ.get(
     "FALLBACK_MESSAGE",
-    "Thanks for reaching out! We'll get back to you soon.",
+    "Thanks for reaching out! For a faster response, please call or "
+    "Viber us directly at 09178350100.",
 )
 LEAD_LABEL_ID = os.environ.get("LEAD_LABEL_ID")
 
@@ -143,6 +144,18 @@ def generate_reply(message_text, presets):
                     "guarantees, stock, policies) that aren't given to you "
                     "in the presets — set reply to null in that case so a "
                     "human can follow up instead.\n\n"
+                    "CRITICAL RULE: you have no ability to actually "
+                    "schedule, book, or confirm anything — no appointments, "
+                    "demos, orders, meetings, or reservations. NEVER say or "
+                    "imply that something has been booked, confirmed, or "
+                    "set (e.g. never say things like 'naka-set na tayo' or "
+                    "'confirmed na po'). If the customer wants to set an "
+                    "appointment, book a demo, or arrange a visit, this is "
+                    "NOT a safe general question — only answer it using an "
+                    "actual matching preset about appointments if one "
+                    "exists; otherwise set reply to null so the fallback "
+                    "message (which tells them to call/Viber directly) is "
+                    "used instead.\n\n"
                     "Voice: sound like a real Filipino small business "
                     "owner personally texting back a customer, not a "
                     "formal AI assistant. Use natural Taglish (mixing "
