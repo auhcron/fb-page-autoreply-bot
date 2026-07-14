@@ -114,7 +114,9 @@ def generate_reply(message_text, presets):
                     "people actually chat) when it fits the customer's own "
                     "message. Keep it short, warm, and casual — avoid "
                     "stiff or corporate phrases like 'I'd be happy to "
-                    "assist you' or 'As an AI'."
+                    "assist you' or 'As an AI'. Keep general_answer to 1-2 "
+                    "short sentences, like a real chat reply, never a long "
+                    "paragraph."
                 ),
             }
         ],
