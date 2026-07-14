@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import os
+import time
 
 import anthropic
 import requests
@@ -21,9 +22,13 @@ FALLBACK_MESSAGE = os.environ.get(
     "Viber us directly at 09178350100.",
 )
 LEAD_LABEL_ID = os.environ.get("LEAD_LABEL_ID")
+HUMAN_PAUSE_SECONDS = int(os.environ.get("HUMAN_PAUSE_HOURS", "2")) * 3600
+BOT_METADATA_TAG = "bot_reply"
 
 app = Flask(__name__)
 claude = anthropic.Anthropic()
+
+paused_until = {}
 
 
 def load_presets():
@@ -135,15 +140,23 @@ def generate_reply(message_text, presets):
                     "include it naturally in the reply text (e.g. 'here's "
                     "a video showing it: <link>'). Never invent or guess "
                     "a link that wasn't given to you.\n"
-                    "- If no preset matched: if this is a simple, general "
-                    "question you can safely answer yourself (greetings, "
-                    "thanks, small talk, generic questions about laser "
-                    "engraving as a craft or technology), write a short "
-                    "safe reply. Do NOT invent or guess specific facts "
-                    "about this business (prices, hours, turnaround time, "
-                    "guarantees, stock, policies) that aren't given to you "
-                    "in the presets — set reply to null in that case so a "
-                    "human can follow up instead.\n\n"
+                    "- If no preset matched: you are a genuinely capable, "
+                    "intelligent assistant — freely use your own knowledge "
+                    "to answer math, trivia, general facts, casual "
+                    "conversation, greetings, small talk, or general "
+                    "questions about laser engraving/materials/technology "
+                    "as a craft, exactly as a smart, well-informed person "
+                    "would. Do NOT default to a generic non-answer for "
+                    "things you actually know. The ONLY thing you must "
+                    "never do is state or imply a specific fact ABOUT THIS "
+                    "BUSINESS (its prices, hours, turnaround time, "
+                    "guarantees, stock, policies, or anything it does or "
+                    "offers) that wasn't given to you in the presets — for "
+                    "those specific business-fact questions only, if "
+                    "nothing in the presets covers it, set reply to null "
+                    "so a human can follow up instead. General knowledge "
+                    "questions unrelated to this business's specific facts "
+                    "are always safe to answer directly.\n\n"
                     "CRITICAL RULE: you have no ability to actually "
                     "schedule, book, or confirm anything — no appointments, "
                     "demos, orders, meetings, or reservations. NEVER say or "
@@ -198,7 +211,10 @@ def send_message(recipient_id, text):
     requests.post(
         "https://graph.facebook.com/v21.0/me/messages",
         params={"access_token": PAGE_ACCESS_TOKEN},
-        json={"recipient": {"id": recipient_id}, "message": {"text": text}},
+        json={
+            "recipient": {"id": recipient_id},
+            "message": {"text": text, "metadata": BOT_METADATA_TAG},
+        },
         timeout=10,
     )
 
@@ -213,7 +229,8 @@ def send_image(recipient_id, image_url):
                 "attachment": {
                     "type": "image",
                     "payload": {"url": image_url, "is_reusable": True},
-                }
+                },
+                "metadata": BOT_METADATA_TAG,
             },
         },
         timeout=10,
@@ -250,9 +267,25 @@ def receive():
     for entry in data.get("entry", []):
         for event in entry.get("messaging", []):
             message = event.get("message")
-            if not message or message.get("is_echo") or "text" not in message:
+            if not message:
                 continue
+
+            if message.get("is_echo"):
+                if message.get("metadata") != BOT_METADATA_TAG:
+                    customer_id = event.get("recipient", {}).get("id")
+                    if customer_id:
+                        paused_until[customer_id] = (
+                            time.time() + HUMAN_PAUSE_SECONDS
+                        )
+                continue
+
+            if "text" not in message:
+                continue
+
             sender_id = event["sender"]["id"]
+            if paused_until.get(sender_id, 0) > time.time():
+                continue
+
             reply, is_lead, matched_index = generate_reply(
                 message["text"], presets
             )
