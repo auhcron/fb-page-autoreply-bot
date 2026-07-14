@@ -125,10 +125,15 @@ def generate_reply(message_text, presets):
                     "and specific term must be preserved exactly as "
                     "written. Do not add, remove, soften, or guess at any "
                     "fact. Only the phrasing/sentence structure should "
-                    "vary. If that preset has a Link (not '(none)'), "
-                    "include that exact URL naturally in the reply (e.g. "
-                    "'here's a video showing it: <link>'). Never invent or "
-                    "guess a link that wasn't given to you.\n"
+                    "vary. If that preset has a Link (not '(none)'): for "
+                    "any URL ending in .jpg/.jpeg/.png/.gif/.webp, do NOT "
+                    "put that URL in your reply text — it will be sent "
+                    "separately as an actual photo, so just write your "
+                    "reply naturally (e.g. mention 'sending a picture' if "
+                    "it fits). For any other URL (like a video link), "
+                    "include it naturally in the reply text (e.g. 'here's "
+                    "a video showing it: <link>'). Never invent or guess "
+                    "a link that wasn't given to you.\n"
                     "- If no preset matched: if this is a simple, general "
                     "question you can safely answer yourself (greetings, "
                     "thanks, small talk, generic questions about laser "
@@ -157,7 +162,23 @@ def generate_reply(message_text, presets):
 
     text = next(b.text for b in response.content if b.type == "text")
     result = json.loads(text)
-    return result.get("reply"), result.get("is_lead", False)
+    return (
+        result.get("reply"),
+        result.get("is_lead", False),
+        result.get("matched_index", 0),
+    )
+
+
+IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".webp")
+
+
+def image_links_for(preset):
+    link_field = (preset.get("link") or "").split()
+    return [
+        url
+        for url in link_field
+        if url.split("?")[0].lower().endswith(IMAGE_EXTENSIONS)
+    ]
 
 
 def send_message(recipient_id, text):
@@ -165,6 +186,23 @@ def send_message(recipient_id, text):
         "https://graph.facebook.com/v21.0/me/messages",
         params={"access_token": PAGE_ACCESS_TOKEN},
         json={"recipient": {"id": recipient_id}, "message": {"text": text}},
+        timeout=10,
+    )
+
+
+def send_image(recipient_id, image_url):
+    requests.post(
+        "https://graph.facebook.com/v21.0/me/messages",
+        params={"access_token": PAGE_ACCESS_TOKEN},
+        json={
+            "recipient": {"id": recipient_id},
+            "message": {
+                "attachment": {
+                    "type": "image",
+                    "payload": {"url": image_url, "is_reusable": True},
+                }
+            },
+        },
         timeout=10,
     )
 
@@ -202,10 +240,15 @@ def receive():
             if not message or message.get("is_echo") or "text" not in message:
                 continue
             sender_id = event["sender"]["id"]
-            reply, is_lead = generate_reply(message["text"], presets)
+            reply, is_lead, matched_index = generate_reply(
+                message["text"], presets
+            )
             send_message(sender_id, reply or FALLBACK_MESSAGE)
             if is_lead:
                 apply_lead_label(sender_id)
+            if 1 <= matched_index <= len(presets):
+                for image_url in image_links_for(presets[matched_index - 1]):
+                    send_image(sender_id, image_url)
 
     return "EVENT_RECEIVED", 200
 
