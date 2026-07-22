@@ -29,6 +29,7 @@ app = Flask(__name__)
 claude = anthropic.Anthropic()
 
 paused_until = {}
+processed_message_ids = set()
 
 
 def load_presets():
@@ -286,6 +287,12 @@ def receive():
 
             if "text" not in message:
                 continue
+
+            message_id = message.get("mid")
+            if message_id:
+                if message_id in processed_message_ids:
+                    continue
+                processed_message_ids.add(message_id)
 
             sender_id = event["sender"]["id"]
             if paused_until.get(sender_id, 0) > time.time():
