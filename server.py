@@ -253,6 +253,11 @@ def apply_lead_label(psid):
     )
 
 
+@app.route("/")
+def home():
+    return "Precision Laser Machine Engravers Philippines — Messenger auto-reply bot is running.", 200
+
+
 @app.route("/webhook", methods=["GET"])
 def verify():
     if request.args.get("hub.verify_token") == VERIFY_TOKEN:
