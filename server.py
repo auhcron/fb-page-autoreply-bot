@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import os
+import threading
 import time
 
 import anthropic
@@ -24,12 +25,20 @@ FALLBACK_MESSAGE = os.environ.get(
 LEAD_LABEL_ID = os.environ.get("LEAD_LABEL_ID")
 HUMAN_PAUSE_SECONDS = int(os.environ.get("HUMAN_PAUSE_HOURS", "2")) * 3600
 BOT_METADATA_TAG = "bot_reply"
+FOLLOWUP_SECONDS = int(os.environ.get("FOLLOWUP_MINUTES", "10")) * 60
+FOLLOWUP_MESSAGE = os.environ.get(
+    "FOLLOWUP_MESSAGE",
+    "Hi po! Sana nakatulong yung sagot namin — may iba pa po ba kayong "
+    "tanong, o gusto niyo na mag-order? 😊",
+)
 
 app = Flask(__name__)
 claude = anthropic.Anthropic()
 
 paused_until = {}
 processed_message_ids = set()
+last_activity = {}
+followup_timers = {}
 
 
 def load_presets():
@@ -118,7 +127,17 @@ def generate_reply(message_text, presets):
                     "business will engrave something for the customer; "
                     "always steer conversations about 'can you engrave "
                     "this for me' toward the fact that they sell the "
-                    "machines themselves, not a service.\n\n"
+                    "machines themselves, not a service. All the machines "
+                    "this business sells are GALVO systems, which are for "
+                    "engraving/marking ONLY — never claim or imply any of "
+                    "them can CUT materials. Cutting requires a completely "
+                    "different type of machine (a gantry system, not a "
+                    "galvo), and for fiber laser specifically, efficient "
+                    "cutting needs at least 1000 watts on a gantry setup — "
+                    "far beyond what a galvo does. If a customer asks about "
+                    "cutting, clarify that these machines only engrave/mark, "
+                    "not cut, and that this business does not currently "
+                    "carry cutting/gantry machines.\n\n"
                     "A customer sent this message to the Page:\n"
                     f'"{message_text}"\n\n'
                     "The customer may write in casual Filipino texting "
@@ -274,6 +293,27 @@ def send_image(recipient_id, image_url):
     )
 
 
+def schedule_followup(psid):
+    marker = time.time()
+    last_activity[psid] = marker
+
+    existing_timer = followup_timers.get(psid)
+    if existing_timer:
+        existing_timer.cancel()
+
+    def maybe_send():
+        if last_activity.get(psid) != marker:
+            return
+        if paused_until.get(psid, 0) > time.time():
+            return
+        send_message(psid, FOLLOWUP_MESSAGE)
+
+    timer = threading.Timer(FOLLOWUP_SECONDS, maybe_send)
+    timer.daemon = True
+    timer.start()
+    followup_timers[psid] = timer
+
+
 def apply_lead_label(psid):
     if not LEAD_LABEL_ID:
         return
@@ -343,6 +383,7 @@ def receive():
             if 1 <= matched_index <= len(presets):
                 for image_url in image_links_for(presets[matched_index - 1]):
                     send_image(sender_id, image_url)
+            schedule_followup(sender_id)
 
     return "EVENT_RECEIVED", 200
 
