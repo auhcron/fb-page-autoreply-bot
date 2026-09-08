@@ -31,6 +31,14 @@ FOLLOWUP_MESSAGE = os.environ.get(
     "Hi po! Sana nakatulong yung sagot namin — may iba pa po ba kayong "
     "tanong, o gusto niyo na mag-order? 😊",
 )
+INTRO_MESSAGE = os.environ.get(
+    "INTRO_MESSAGE",
+    "Hi po! I'm Mackenzie, an AI assistant na sumasagot dito kapag "
+    "wala pa online si Ron. Para sa mabilisang tanong, pwede niyo rin "
+    "siyang tawagan o i-Viber sa 09178350100. Sa ngayon po, hindi pa "
+    "kami tumatanggap ng engraving services — nagbebenta lang po kami "
+    "ng machines. 😊",
+)
 
 app = Flask(__name__)
 claude = anthropic.Anthropic()
@@ -39,6 +47,7 @@ paused_until = {}
 processed_message_ids = set()
 last_activity = {}
 followup_timers = {}
+introduced_psids = set()
 
 
 def load_presets():
@@ -240,6 +249,13 @@ def generate_reply(message_text, presets):
                     "professional throughout. Keep the reply to 1-3 short "
                     "sentences, like a real chat message, never a long "
                     "paragraph.\n\n"
+                    "Identity: your name is Mackenzie. If the customer "
+                    "directly asks who they're chatting with, or whether "
+                    "you're a bot/AI, answer honestly and briefly — you're "
+                    "Mackenzie, an AI assistant that handles chats when "
+                    "Ron (the owner) isn't online. Don't bring this up "
+                    "unprompted in every reply, only when they actually "
+                    "ask.\n\n"
                     "Always-available help: whenever you're not fully "
                     "confident you've properly answered the customer's "
                     "actual question — whether because it's outside what "
@@ -391,6 +407,10 @@ def receive():
             sender_id = event["sender"]["id"]
             if paused_until.get(sender_id, 0) > time.time():
                 continue
+
+            if sender_id not in introduced_psids:
+                send_message(sender_id, INTRO_MESSAGE)
+                introduced_psids.add(sender_id)
 
             reply, is_lead, matched_index = generate_reply(
                 message["text"], presets
