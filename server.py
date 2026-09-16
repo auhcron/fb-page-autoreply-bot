@@ -23,7 +23,7 @@ FALLBACK_MESSAGE = os.environ.get(
     "Viber us directly at 09178350100.",
 )
 LEAD_LABEL_ID = os.environ.get("LEAD_LABEL_ID")
-HUMAN_PAUSE_SECONDS = int(os.environ.get("HUMAN_PAUSE_HOURS", "2")) * 3600
+HUMAN_PAUSE_SECONDS = int(os.environ.get("HUMAN_PAUSE_MINUTES", "30")) * 60
 BOT_METADATA_TAG = "bot_reply"
 FOLLOWUP_SECONDS = int(os.environ.get("FOLLOWUP_MINUTES", "10")) * 60
 FOLLOWUP_MESSAGE = os.environ.get(
