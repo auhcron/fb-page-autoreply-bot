@@ -31,13 +31,18 @@ FOLLOWUP_MESSAGE = os.environ.get(
     "Hi po! Sana nakatulong yung sagot namin — may iba pa po ba kayong "
     "tanong, o gusto niyo na mag-order? 😊",
 )
+VIDEO_URL = os.environ.get(
+    "VIDEO_URL",
+    "https://www.facebook.com/100090936219742/videos/7801391133280479/"
+    "?fs=e&mibextid=wwXIfr&rdid=7ts5dwmppDDQx3eI#",
+)
 INTRO_MESSAGE = os.environ.get(
     "INTRO_MESSAGE",
-    "Hi po! I'm Mackenzie, an AI assistant na sumasagot dito kapag "
-    "wala pa online si Ron. Para sa mabilisang tanong, pwede niyo rin "
-    "siyang tawagan o i-Viber sa 09178350100. Sa ngayon po, hindi pa "
-    "kami tumatanggap ng engraving services — nagbebenta lang po kami "
-    "ng machines. 😊",
+    "Hi po! I'm Mackenzie, AI assistant na sumasagot kapag offline si "
+    "Ron. Para sa mabilis na sagot, tawag o Viber po kayo sa "
+    "09178350100. Paalala lang po: hindi kami tumatanggap ng engraving "
+    "services, machines lang po ang binebenta namin. Panoorin niyo rin "
+    f"po ito para makita ang difference ng lasers: {VIDEO_URL} 😊",
 )
 
 app = Flask(__name__)
@@ -182,8 +187,11 @@ def generate_reply(message_text, presets):
                     "canned script, but you MUST keep every specific fact "
                     "exactly the same — every price, number, name, date, "
                     "and specific term must be preserved exactly as "
-                    "written. Do not add, remove, soften, or guess at any "
-                    "fact. Only the phrasing/sentence structure should "
+                    "written. Do not add, change, soften, or guess at any "
+                    "fact. You may leave out details that aren't needed to "
+                    "answer what the customer actually asked (to keep the "
+                    "reply short), but never alter a fact you do include. "
+                    "Only the phrasing/sentence structure should "
                     "vary. If that preset has a Link (not '(none)'): for "
                     "any URL ending in .jpg/.jpeg/.png/.gif/.webp, do NOT "
                     "put that URL in your reply text — it will be sent "
@@ -246,9 +254,21 @@ def generate_reply(message_text, presets):
                     "or 'As an AI'. Vary your sentence openers and "
                     "phrasing naturally the way a real person texting on "
                     "their phone would, while staying respectful and "
-                    "professional throughout. Keep the reply to 1-3 short "
-                    "sentences, like a real chat message, never a long "
-                    "paragraph.\n\n"
+                    "professional throughout. Keep every reply SHORT — "
+                    "1-2 short sentences, around 40 words at most — like a "
+                    "real chat message. Nobody reads long replies. Answer "
+                    "only what was asked and don't dump every detail from a "
+                    "preset; the customer can ask follow-ups. Never write "
+                    "a long paragraph or a long list (exception: if they "
+                    "ask for prices of all machines, give the prices "
+                    "compactly).\n\n"
+                    "Video: the owner has a Facebook video that explains and "
+                    "shows the differences between the laser machines: "
+                    f"{VIDEO_URL} — whenever the conversation is about "
+                    "choosing a machine, comparing lasers, what to buy, or "
+                    "prices, recommend they watch it (one short sentence "
+                    "plus the link). Don't use the video as a substitute "
+                    "for answering their actual question.\n\n"
                     "Identity: your name is Mackenzie. If the customer "
                     "directly asks who they're chatting with, or whether "
                     "you're a bot/AI, answer honestly and briefly — you're "
@@ -262,7 +282,8 @@ def generate_reply(message_text, presets):
                     "the presets cover, ambiguous, or something you're "
                     "genuinely unsure about — politely let them know they "
                     "can call or Viber 09178350100 for more help, in "
-                    "addition to whatever you were able to answer.\n\n"
+                    "addition to whatever you were able to answer (keep "
+                    "that part to a few words).\n\n"
                     "Step 3: Set is_lead to true only if this specific "
                     "message shows genuine buying intent (see schema), "
                     "not just because a preset happened to match."
